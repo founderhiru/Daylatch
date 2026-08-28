@@ -11,8 +11,10 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
+  UserRound,
 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import Link from 'next/link';
+import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,11 +31,24 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { apiFetch } from '@/lib/api-client';
+import { HouseholdItem } from '@/lib/contracts/household';
 import {
   IntakeCreate,
   IntakeResult,
   type IntakeResult as IntakeResultType,
 } from '@/lib/contracts/intake';
+import { IntakeConfirm } from '@/lib/contracts/intake-to-responsibility';
+import { type ResponsibilityDomain, ResponsibilityItem } from '@/lib/contracts/responsibility';
+
+const DOMAIN_OPTIONS: { value: ResponsibilityDomain; label: string }[] = [
+  { value: 'other', label: 'Other' },
+  { value: 'car', label: 'Car' },
+  { value: 'school', label: 'School' },
+  { value: 'health', label: 'Health' },
+  { value: 'home', label: 'Home' },
+  { value: 'finance', label: 'Finance' },
+  { value: 'travel', label: 'Travel' },
+];
 
 const CATEGORY_OPTIONS = [
   { value: 'email', label: 'Email' },
@@ -58,6 +73,23 @@ export function IntakeWorkspace() {
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+
+  // Part 11 (intake -> Responsibility): the household + owner selector for
+  // the explicit "save as a household responsibility" step below. Fetched
+  // lazily — this component works fully without it (the AI extraction path
+  // is unchanged) even if /api/household is unavailable.
+  const [household, setHousehold] = useState<HouseholdItem | null>(null);
+  const [domain, setDomain] = useState<ResponsibilityDomain>('other');
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [providerName, setProviderName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedResponsibility, setSavedResponsibility] = useState<ResponsibilityItem | null>(null);
+
+  useEffect(() => {
+    apiFetch('/api/household', { schema: HouseholdItem })
+      .then(setHousehold)
+      .catch(() => undefined); // Non-fatal — saving to a household is optional, extraction still works.
+  }, []);
 
   const updateMissingEntries = (nextEntries: MissingEntry[]) => {
     setMissingEntries(nextEntries);
@@ -128,6 +160,10 @@ export function IntakeWorkspace() {
       setMissingEntries(result.missingInformation.map(createEntry));
       setDraftErrors({});
       setIsCompleted(false);
+      setDomain('other');
+      setOwnerId(null);
+      setProviderName('');
+      setSavedResponsibility(null);
       toast.success('Your next step is ready.');
     } catch {
       toast.error('Daylatch could not read that yet. Please try again.');
@@ -151,6 +187,47 @@ export function IntakeWorkspace() {
     setMissingEntries([]);
     setDraftErrors({});
     setIsCompleted(false);
+    setDomain('other');
+    setOwnerId(null);
+    setProviderName('');
+    setSavedResponsibility(null);
+  };
+
+  // Part 11's explicit confirmation step: AI proposes (already happened) ->
+  // human reviews (the editable fields above) -> human confirms (this click)
+  // -> Daylatch saves. The draft is re-validated before it is sent, since the
+  // person may have edited any field.
+  const saveToHousehold = async () => {
+    if (!validateDraft() || !draft) return;
+    const parsed = IntakeConfirm.safeParse({
+      summary: draft.summary,
+      category: draft.category,
+      domain,
+      deadline: draft.deadline,
+      nextStep: draft.nextStep,
+      missingInformation: missingEntries.map((entry) => entry.value),
+      ownerId,
+      providerName: providerName.trim() || undefined,
+    });
+    if (!parsed.success) {
+      toast.error('Fix the highlighted fields before saving.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const created = await apiFetch<ResponsibilityItem>('/api/intake/confirm', {
+        method: 'POST',
+        body: JSON.stringify(parsed.data),
+        schema: ResponsibilityItem,
+      });
+      setSavedResponsibility(created);
+      toast.success('Saved as a household responsibility.');
+    } catch {
+      toast.error('Could not save that to the household right now.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -421,6 +498,95 @@ export function IntakeWorkspace() {
                   {draftErrors.missingInformation ? (
                     <p className="text-sm text-destructive">{draftErrors.missingInformation}</p>
                   ) : null}
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border bg-muted/10 p-4">
+                  <Label className="flex items-center gap-2">
+                    <UserRound className="size-4 text-primary" aria-hidden="true" />
+                    Save as a household responsibility
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Optional — Daylatch never saves this automatically. Confirm the household area,
+                    and optionally an owner and provider, then save below.
+                  </p>
+                  {savedResponsibility ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/20 bg-primary/5 p-3">
+                      <p className="text-sm text-primary">
+                        Saved as “{savedResponsibility.title}”.
+                      </p>
+                      <Button asChild variant="link" size="sm" className="h-auto p-0">
+                        <Link href="/dashboard">View on the dashboard →</Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="domain" className="text-xs text-muted-foreground">
+                            Household area
+                          </Label>
+                          <Select
+                            value={domain}
+                            onValueChange={(value) => setDomain(value as typeof domain)}
+                          >
+                            <SelectTrigger id="domain" className="bg-card/70">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DOMAIN_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="owner" className="text-xs text-muted-foreground">
+                            Owner
+                          </Label>
+                          <Select
+                            value={ownerId ?? 'unassigned'}
+                            onValueChange={(value) =>
+                              setOwnerId(value === 'unassigned' ? null : value)
+                            }
+                          >
+                            <SelectTrigger id="owner" className="bg-card/70">
+                              <SelectValue placeholder="Unassigned" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unassigned">Unassigned</SelectItem>
+                              {(household?.members ?? []).map((member) => (
+                                <SelectItem key={member.id} value={member.id}>
+                                  {member.displayName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="provider" className="text-xs text-muted-foreground">
+                            Provider (optional)
+                          </Label>
+                          <Input
+                            id="provider"
+                            value={providerName}
+                            onChange={(event) => setProviderName(event.target.value)}
+                            placeholder="e.g. Apex General Insurance"
+                            className="bg-card/70"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={saveToHousehold}
+                        disabled={isSaving}
+                      >
+                        {isSaving ? 'Saving…' : 'Save to household'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <Separator />

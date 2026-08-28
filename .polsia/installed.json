@@ -1,0 +1,116 @@
+{
+  "$schema": "https://polsia.app/schema/installed.v1.json",
+  "_doc": "Machine-owned trust anchor (per D21). Installed modules + versions + install-hashes + ejected files + slot assignments + day-1 validator floor. Users must NOT edit this file; the framework can no longer trust the state if they do. Hand-editable per-module overrides live in .polsia/overrides.json. Path -> tier mapping lives in .polsia/ownership.json (generated from installed manifests).",
+  "template": {
+    "id": "polsia-next-v2",
+    "name": "polsia/template-next",
+    "version": "0.3.0",
+    "framework": "next",
+    "framework_version": "16.2.6",
+    "installed_at": "PLACEHOLDER_TIMESTAMP",
+    "install_hash": "PLACEHOLDER_HASH"
+  },
+  "modules": [
+    {
+      "name": "ai",
+      "version": "0.1.0",
+      "target": "next",
+      "install_hash": "sha256:6dd45fd7582ef9fb307f0f316f9d43d41ae4e8e0ee78c599a1f0516e3d041795",
+      "installed_at": "2026-08-28T10:41:52.079Z",
+      "source": "Polsia-Inc/modules/modules/ai",
+      "ref_sha": "d073eefc49cf17e4e2decaf6314b1a35fa74792b",
+      "ownership_appends": [
+        {
+          "path": "src/lib/ai/schema.ts",
+          "tier": "framework_owned"
+        },
+        {
+          "path": "src/lib/ai/client.ts",
+          "tier": "framework_owned"
+        },
+        {
+          "path": "src/lib/ai/use-chat.ts",
+          "tier": "framework_owned"
+        },
+        {
+          "path": "src/app/api/ai/chat/route.ts",
+          "tier": "framework_owned"
+        },
+        {
+          "path": "src/components/custom/ai-chat.tsx",
+          "tier": "user_owned"
+        },
+        {
+          "path": "src/lib/ai/schema.ts",
+          "tier": "framework_owned"
+        },
+        {
+          "path": "src/lib/ai/client.ts",
+          "tier": "framework_owned"
+        },
+        {
+          "path": "src/lib/ai/use-chat.ts",
+          "tier": "framework_owned"
+        },
+        {
+          "path": "src/app/api/ai/chat/route.ts",
+          "tier": "framework_owned"
+        }
+      ],
+      "files": {
+        "src/lib/ai/schema.ts": {
+          "path": "src/lib/ai/schema.ts",
+          "tier": "framework_owned",
+          "integrity": "sha256:39b0bb00a3d1dced40c11f7f4efe2fc0402da1142a87b2ef1fcd822278fc9eba",
+          "pinned": false,
+          "alias": null
+        },
+        "src/lib/ai/client.ts": {
+          "path": "src/lib/ai/client.ts",
+          "tier": "framework_owned",
+          "integrity": "sha256:9387cafe51e1d6920da697f47ff03e6f2f13d01b87a5952717c5f0236526d365",
+          "pinned": false,
+          "alias": null
+        },
+        "src/lib/ai/use-chat.ts": {
+          "path": "src/lib/ai/use-chat.ts",
+          "tier": "framework_owned",
+          "integrity": "sha256:2a7d226dc0c7185e6c064b7139711ed7938437cb4801959c277414ab4547ae7e",
+          "pinned": false,
+          "alias": null
+        },
+        "src/app/api/ai/chat/route.ts": {
+          "path": "src/app/api/ai/chat/route.ts",
+          "tier": "framework_owned",
+          "integrity": "sha256:7928bce510c8791c9bcae99811b05f2e5d19d162cc999bfb5fe54e47983a3b08",
+          "pinned": false,
+          "alias": null
+        },
+        "src/components/custom/ai-chat.tsx": {
+          "path": "src/components/custom/ai-chat.tsx",
+          "tier": "user_owned",
+          "integrity": "sha256:a3d38b91c466074aadcfc74209190582ff65f3afa9158a73b04cbb8252d7f6fa",
+          "pinned": false,
+          "alias": null
+        }
+      }
+    }
+  ],
+  "install_hashes": {
+    "ai": "sha256:6dd45fd7582ef9fb307f0f316f9d43d41ae4e8e0ee78c599a1f0516e3d041795"
+  },
+  "ejected_files": [],
+  "slot_assignments": {},
+  "day_1_floor": [
+    "no-secrets-in-client-bundle",
+    "server-only-import-on-secret-modules",
+    "agent-has-no-prod-db-credentials",
+    "db-ssl-required",
+    "parameterized-queries-only",
+    "security-headers-present",
+    "lockfile-committed-and-pinned",
+    "lifecycle-scripts-disabled",
+    "next-version-not-affected-by-cve-2025-29927"
+  ],
+  "_note_day_1_floor": "Templates are scaffolds with the shadcn/UI baseline shipped IN the template (components.json + cn() + a committed base primitive set + a next-themes ThemeProvider + a token-driven theme), plus the framework-native default DB client (Prisma for template-next). This floor is the scaffold-applicable validator set plus the data checks the baked-in DB client makes runnable on day 1. Other module-specific validators ship in module manifests and are added when those modules install. Validator names must exist in Polsia-Inc/modules/validators/README.md."
+}
