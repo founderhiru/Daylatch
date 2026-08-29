@@ -68,6 +68,9 @@ export async function seed(): Promise<void> {
     create: { name: 'CityNet Broadband', domain: 'home' },
     update: {},
   });
+    if (!dad || !mom) {
+  throw new Error('Failed to create demo household members');
+}
 
   const demoResponsibilities = [
     {
