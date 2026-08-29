@@ -31,7 +31,7 @@ export const navItems: NavItem[] = [
   { label: 'Try Daylatch', href: '/try', group: 'secondary', order: 2 },
   {
     label: 'Contact Daylatch',
-    href: 'mailto:daylatch-6@polsia.app?subject=Hello%20Daylatch',
+    href: 'mailto:hello@daylatch.app?subject=Hello%20Daylatch',
     group: 'footer',
     order: 0,
   },
