@@ -50,7 +50,9 @@ export async function seed(): Promise<void> {
       }),
     ),
   );
-
+if (!dad || !mom) {
+  throw new Error('Failed to create demo household members');
+}
   const daysFromNow = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000);
   const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
