@@ -80,7 +80,7 @@ if (!dad || !mom) {
       description: 'Policy MH-02-8841 renewal quote of ₹18,400.',
       category: 'bill' as const,
       domain: 'car' as const,
-      ownerId: dad.id,
+      ownerId: dad!.id,
       providerId: insurer.id,
       stage: 'active' as const,
       priority: 3,
