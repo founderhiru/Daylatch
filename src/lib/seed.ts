@@ -139,7 +139,7 @@ if (!dad || !mom) {
       description: 'Annual plan renewed.',
       category: 'bill' as const,
       domain: 'home' as const,
-      ownerId: dad.id,
+      ownerId: dad!.id,
       providerId: broadband.id,
       amount: 1200,
       stage: 'completed' as const,
