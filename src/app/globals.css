@@ -125,13 +125,13 @@
    border role + dark mode from these (see the derived block below), so editing
    --brand-h ALONE recolors the entire site. Keep values in range. */
 :root {
-  --brand-h: 32; /* brand hue, 0–360 */
-  --brand-c: 0.16; /* brand chroma (saturation), 0–0.3 */
-  --brand-l: 0.59; /* lightness of the brand-500 step, 0.40–0.70 */
-  --radius: 0.375rem; /* corner roundness — cascades to every primitive */
+  --brand-h: 32; /* brand hue, 0–360 — warm terracotta */
+  --brand-c: 0.152; /* brand chroma (saturation), 0–0.3 */
+  --brand-l: 0.505; /* lightness of the brand-500 step, 0.40–0.70 */
+  --radius: 0.875rem; /* corner roundness — cascades to every primitive */
 
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-display: ui-serif, Charter, "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 /* === END polsia-slot:brand_tokens === */
 

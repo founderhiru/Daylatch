@@ -123,7 +123,11 @@ export function SiteNav() {
         aria-label="Primary"
         className="mx-auto flex h-14 max-w-screen-xl items-center gap-2 px-4"
       >
-        <Link href="/" className="mr-2 shrink-0 truncate text-base font-semibold tracking-tight">
+        <Link
+          href="/"
+          className="mr-2 flex shrink-0 items-center gap-2 truncate font-display text-base font-semibold tracking-tight"
+        >
+          <span aria-hidden="true" className="size-4 rounded-[5px] bg-primary" />
           {siteName}
         </Link>
 

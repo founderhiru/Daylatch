@@ -20,9 +20,18 @@ export interface NavItem {
 }
 
 export const navItems: NavItem[] = [
+  { label: 'How it works', href: '/#how', group: 'primary', order: 1 },
+  { label: 'Coordination', href: '/#coordination', group: 'primary', order: 2 },
+  { label: 'Trust', href: '/#trust', group: 'primary', order: 3 },
+  // Demo-mode dashboard: NOT gated by requiresAuth because no auth module is
+  // installed yet (see src/app/(custom)/dashboard/page.tsx's demo-mode notice
+  // and AGENTS.md Part 17 — do not fake authentication). Re-flag this
+  // `requiresAuth: true` the moment a real auth module is installed.
+  { label: 'Dashboard (demo)', href: '/dashboard', group: 'secondary', order: 1 },
+  { label: 'Try Daylatch', href: '/try', group: 'secondary', order: 2 },
   {
     label: 'Contact Daylatch',
-    href: 'mailto:daylatch-6@polsia.app?subject=Hello%20Daylatch',
+    href: 'mailto:hello@daylatch.app?subject=Hello%20Daylatch',
     group: 'footer',
     order: 0,
   },

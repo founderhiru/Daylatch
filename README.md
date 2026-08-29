@@ -1,263 +1,141 @@
-# polsia-next-v2
+# Daylatch
 
-The canonical Next.js template for Polsia-generated customer apps.
+The operating layer for your household — a Next.js + Prisma app that turns
+pasted messages, bills, and notes into organized, assigned household
+responsibilities.
 
-This repository is a scaffold with the shadcn UI baseline built in. It ships the
-framework defaults every app needs on day one: Next.js 16 App Router, React 19,
-Tailwind 4, Prisma client wiring, Biome, Vitest, security headers, a token-driven
-theme, and a broad shadcn primitive set. Product capabilities such as auth,
-billing, email, analytics, dashboards, and multi-tenant workflows are installed
-from `Polsia-Inc/modules`.
+This app no longer depends on Polsia. It's a standard Next.js application:
+GitHub → Vercel → Next.js → Prisma → PostgreSQL, with Claude (Anthropic API)
+for the intake-understanding feature.
 
-## What This Is
+## Stack
 
-This is a template, not a hand-customized starter app. The Polsia engineering
-agent reads the ownership map, installs modules when needed, and edits only the
-bounded app-owned zones. The directory shape and `.polsia/ownership.json` are
-the contract that keeps framework files, module files, and customer code
-separate.
+- Next.js 16 (App Router), React 19, TypeScript, Tailwind 4
+- Prisma 6 + PostgreSQL (any standard Postgres — Supabase, Neon, a local
+  instance, etc.)
+- Anthropic API (`@anthropic-ai/sdk`) for AI-assisted intake extraction
+- shadcn/ui primitive set, Biome (lint/format), Vitest (tests)
 
-The canonical template id is `polsia-next-v2`; the GitHub repository is
-`Polsia-Inc/template-next`.
+## Environment variables
 
-## What Is Included
+Copy `.env.example` to `.env.local` and fill in real values for local
+development:
 
-- Next.js 16 App Router, React 19, TypeScript, and Tailwind 4.
-- shadcn UI baseline: `components.json`, `cn()`, a committed primitive set in
-  `src/components/ui/**`, sonner toasts, next-themes, and theme tokens in
-  `src/app/globals.css`.
-- Prisma 6 client setup: `prisma/schema/_base.prisma`, `prisma.config.ts`, and
-  the server-only singleton in `src/lib/db.ts`. The actual database is external;
-  Polsia provisions Postgres and injects `DATABASE_URL`.
-- Typed environment validation through `src/lib/env.ts`.
-- Data-plane examples: a shared zod contract, an `/api/example` route handler,
-  and a client page that uses `apiFetch`.
-- CSP and security headers in `proxy.ts`, `next.config.ts`, and
-  `src/lib/csp.ts`.
-- SEO plumbing: `src/lib/brand.ts`, `src/lib/site.ts`, `robots.ts`,
-  `sitemap.ts`, `manifest.ts`, a default Open Graph image route, and an
-  `/llms.txt` route (llmstxt.org) for AI/LLM crawlers curated via
-  `src/lib/llms-config.ts`.
-- Unit tests covering the ownership map, CSP posture, env validation, and the
-  example data contract.
-
-## What Is Not Included
-
-- No auth, billing, email, analytics, dashboards, or other product modules.
-- No database server, Dockerfile, compose file, or Procfile.
-- No real env files. `.env.example` documents the expected variables; deploys
-  receive actual values from the platform.
-- No Server Actions. Product pages call `/api/*` route handlers through
-  `src/lib/api-client.ts`.
-
-## Ownership Model
-
-Always read `.polsia/installed.json`, `.polsia/ownership.json`, and
-`.polsia/overrides.json` before editing.
-
-| Tier | Examples | Who edits |
+| Variable | Required | Notes |
 | --- | --- | --- |
-| `framework_owned` | `src/lib/db.ts`, `src/lib/utils.ts`, `components.json`, `prisma.config.ts`, `AGENTS.md`, `.polsia/installed.json`, `.polsia/ownership.json` | Framework or owning module only. |
-| `user_owned` | `src/components/ui/**`, `src/app/(setup)/page.tsx`, `src/app/(custom)/**`, `src/lib/brand.ts`, `src/lib/nav.ts`, `public/**`, `README.md`, `.polsia/overrides.json` | The app agent or customer. |
-| `shared` | `src/app/globals.css`, `src/lib/env.ts`, `src/app/layout.tsx`, `proxy.ts`, `next.config.ts`, `package.json`, `.env.example` | Edit only through declared slots or the documented merge strategy. |
+| `DATABASE_URL` | Yes | Standard PostgreSQL connection string. |
+| `ANTHROPIC_API_KEY` | For the intake/capture feature | Server-only — get one at https://console.anthropic.com/. Never prefix this `NEXT_PUBLIC_`. |
+| `NEXT_PUBLIC_APP_URL` | No (defaults to `http://localhost:3000`) | The app's own public origin, used for canonical URLs and metadata. |
 
-`.polsia/ownership.json` is the source of truth. Source banners are reader
-signage only.
+`typecheck`, `lint`, and `test` don't need any of these set. `dev` and
+`build` validate them unless you set `SKIP_ENV_VALIDATION=1`.
 
-## What Not To Edit
-
-- Anything marked `framework_owned` in `.polsia/ownership.json`.
-  Comment-capable source files carry `@polsia:framework-owned` banners as
-  signage, but the ownership map is the authority.
-- Anything outside declared slot markers in shared files such as
-  `next.config.ts`, `proxy.ts`, `src/lib/env.ts`, `src/app/layout.tsx`, and
-  `src/app/globals.css`.
-- `.polsia/installed.json` and `.polsia/ownership.json`. They are generated
-  state files. Use `.polsia/overrides.json` for hand-editable module policy.
-
-## Platform Rules
-
-- Keep Cache Components off unless the platform explicitly changes that policy.
-- Use `proxy.ts`; do not add `middleware.ts`.
-- Keep data and mutations behind `/api/*` route handlers. Do not add Server
-  Actions.
-- Keep Prisma datasource and generator declarations in `prisma/schema/_base.prisma`.
-  App or module schema files add models only.
-- `src/app/(auth)/**` and `src/app/(dashboard)/**` pages are user-owned — build and
-  restyle them freely. Don't hand-roll the auth security surface (`src/lib/auth.ts`,
-  `src/app/api/auth/**`, the prisma auth schema, `require-auth`/`require-admin`):
-  those are framework-owned, installed by the auth module.
-- Put recurring work in `polsia.toml` `[[crons]]`; do not use in-process
-  schedulers for product behavior.
-
-## Agent Workflow
-
-1. Read `AGENTS.md` and the three `.polsia/` state files.
-2. Decide whether the request is app-specific UI/business logic or a reusable
-   capability that should come from a module.
-3. Install modules through the Polsia module installer when a module owns the
-   capability. Do not clone module files by hand.
-4. Write app-specific code in user-owned areas:
-   - Routes: `src/app/(custom)/<feature>/page.tsx`
-   - API handlers: `src/app/api/<resource>/route.ts`
-   - Contracts: `src/lib/contracts/<resource>.ts`
-   - Business logic: `src/lib/business/<feature>.ts`
-   - Custom components: `src/components/custom/<feature>.tsx`
-   - Hooks: `src/hooks/use-<feature>.ts`
-5. Replace the starter home by editing `src/app/(setup)/page.tsx` in place, or
-   delete the `(setup)` route group before adding another page that resolves to
-   `/`.
-6. Set the product identity in `src/lib/brand.ts`, update `src/lib/nav.ts` for
-   reachable public pages, and rely on the built-in robots, sitemap, metadata,
-   and Open Graph plumbing.
-7. Keep every feature reachable from the home page or, for authenticated
-   features, the dashboard.
-8. Run the relevant checks before shipping.
-
-Module installs go through the Polsia module installer. The installer owns
-module file writes, ownership-map updates, install hashes, and module validators.
-Do not clone module files or copy them by hand.
-
-## Data Plane
-
-Product pages are client components. They call route handlers through
-`apiFetch`, passing a shared zod schema to validate the response at runtime.
-
-Each resource should have one shared contract in `src/lib/contracts/<resource>.ts`.
-The route handler validates request and response shapes with that contract, and
-the client imports the same schema.
-
-Validation errors from route handlers use:
-
-```ts
-{ errors: { fieldName: 'Message' } }
-```
-
-Client forms map those errors with `applyServerErrors`. Transient success or
-unexpected failure feedback should use `toast` from `sonner`.
-
-## UI
-
-The template already includes a broad shadcn primitive set under
-`src/components/ui/**`. Compose those primitives first, restyle through theme
-tokens and component variants, and add new primitives with:
-
-```bash
-npx shadcn@latest add <name> --yes
-```
-
-Reusable app-specific UI belongs in `src/components/custom/**`.
-
-## Directory Guide
-
-```text
-.
-├── .polsia/                          Generated state and ownership map
-├── prisma/
-│   ├── schema/_base.prisma           Datasource + generator only
-│   └── migrations/migration_lock.toml Project-level migration lock
-├── public/                           Customer assets
-├── src/
-│   ├── app/
-│   │   ├── (setup)/page.tsx          Starter home served at /
-│   │   ├── (custom)/example/page.tsx Data-plane example page
-│   │   ├── api/example/route.ts      Data-plane example route
-│   │   ├── health/route.ts           Deploy healthcheck
-│   │   ├── layout.tsx                Root layout and providers slot
-│   │   └── globals.css               Tailwind theme and brand token slot
-│   ├── components/
-│   │   ├── ui/                       shadcn primitives
-│   │   ├── custom/                   App-owned compositions
-│   │   └── theme-provider.tsx        next-themes wrapper
-│   ├── hooks/                        App-owned React hooks
-│   ├── lib/
-│   │   ├── api-client.ts             Client transport helper
-│   │   ├── brand.ts                  Product name and description
-│   │   ├── contracts/example.ts      Example shared zod contract
-│   │   ├── csp.ts                    CSP builder
-│   │   ├── db.ts                     Prisma singleton
-│   │   ├── env.ts                    Typed env schema
-│   │   ├── forms.ts                  Server error mapping
-│   │   ├── nav.ts                    App navigation config
-│   │   └── utils.ts                  cn()
-│   └── modules/                      Vendored module installs
-├── tests/unit/                       Vitest unit tests
-├── next.config.ts                    Next config and security headers
-├── proxy.ts                          CSP nonce and middleware chain slot
-├── polsia.toml                       Deploy manifest and scheduled jobs
-└── AGENTS.md                         Engineering agent operating manual
-```
-
-## Security Headers
-
-`next.config.ts` sets baseline response headers:
-
-- `Strict-Transport-Security`
-- `X-Content-Type-Options`
-- `X-Frame-Options`
-- `Referrer-Policy`
-- `Permissions-Policy`
-- `Cross-Origin-Opener-Policy`
-- `Cross-Origin-Resource-Policy`
-
-`proxy.ts` sets a per-request Content Security Policy. `script-src` stays strict
-with a nonce and `strict-dynamic`; `style-src` allows inline styles so Radix and
-shadcn runtime positioning works in production.
-
-## Day-1 Validators
-
-The bare scaffold validator floor is declared in
-`.polsia/installed.json#day_1_floor`. Module-specific validators are added by
-module manifests when modules install.
-
-- `no-secrets-in-client-bundle`
-- `server-only-import-on-secret-modules`
-- `agent-has-no-prod-db-credentials`
-- `db-ssl-required`
-- `parameterized-queries-only`
-- `security-headers-present`
-- `lockfile-committed-and-pinned`
-- `lifecycle-scripts-disabled`
-- `next-version-not-affected-by-cve-2025-29927`
-
-## Local Development
-
-Use npm; the lockfile is committed.
+## Local development
 
 ```bash
 npm install
+npx prisma generate      # regenerates the Prisma client; also runs automatically via postinstall
+npx prisma db push       # applies the schema to your database (see "Database" below)
+npm run dev
+```
+
+Other useful commands:
+
+```bash
 npm run typecheck
 npm run lint
 npm run test
-SKIP_ENV_VALIDATION=1 npm run dev
+npm run build
 ```
 
-`npm run dev` and `npm run build` validate `DATABASE_URL` and
-`NEXT_PUBLIC_APP_URL` when `SKIP_ENV_VALIDATION` is not set. On a local clone
-without a provisioned database, either set the required vars in `.env.local` or
-prefix the command with `SKIP_ENV_VALIDATION=1`.
+## Database
 
-`typecheck`, `lint`, and `test` do not require env. With no modules installed,
-`/` serves the `(setup)` placeholder until a module or app-authored root page
-takes over.
+Prisma is the only database layer — there's no ORM alternative or raw SQL
+scattered around. The schema lives in `prisma/schema/` (`_base.prisma` for
+the datasource/generator, `household.prisma` for the actual models).
 
-## Versions
+**There's no automatic migration step wired into the build or deploy
+process.** That's deliberate: automatically running a schema-changing
+command against a real database on every deploy is exactly the kind of
+thing that can silently drop or alter data. Instead, apply schema changes
+yourself, deliberately, whenever the schema actually changes:
 
-Pinned exact versions are used for the framework stack:
+```bash
+npx prisma db push
+```
 
-- Next.js 16.2.6, App Router
-- React 19.2.7
-- Tailwind CSS 4.3.0, CSS-first `@theme`
-- shadcn/ui New York style
-- sonner 2.0.7
-- TypeScript 5.5.4, strict mode
-- Biome 2.3.1, lint and format
-- Vitest 3.2.6
-- Prisma 6.19.3
-- Node >=20.18.1
+(This project hasn't generated real Prisma migrations yet — `db push` is
+the right tool for now. Once the schema stabilizes and you want proper
+migration history, switch to `npx prisma migrate dev` locally and
+`npx prisma migrate deploy` in production.)
 
-Security `overrides` in `package.json` pin patched transitive dependency
-versions that direct framework pins cannot reach on their own.
+## Deploying to Vercel
+
+No Vercel-specific configuration file is needed — Vercel auto-detects
+Next.js and runs `npm install` (which triggers `prisma generate` via
+`postinstall`) followed by `next build`.
+
+1. Import this repository into Vercel.
+2. Set `DATABASE_URL` and `ANTHROPIC_API_KEY` (and `NEXT_PUBLIC_APP_URL`
+   once you have a real domain) in the Vercel project's Environment
+   Variables settings. Never commit real values for these — `.gitignore`
+   already blocks every `.env*` file except `.env.example`.
+3. Before the first deploy (and after any schema change), run
+   `npx prisma db push` yourself against the production `DATABASE_URL` —
+   see "Database" above for why this isn't automated.
+4. Deploy.
+
+## Directory guide
+
+```text
+.
+├── prisma/
+│   ├── schema/_base.prisma           Datasource + generator
+│   └── schema/household.prisma       Household/Responsibility/Activity/Provider models
+├── src/
+│   ├── app/
+│   │   ├── page.tsx                  Marketing homepage (/)
+│   │   ├── (custom)/
+│   │   │   ├── try/                  Desktop intake tool
+│   │   │   ├── capture/              Mobile capture flow
+│   │   │   ├── dashboard/            Household command center
+│   │   │   ├── household/            "Who has what?" view
+│   │   │   ├── responsibilities/[id]/ Responsibility detail
+│   │   │   └── activity/             Household activity history
+│   │   ├── api/                      Route handlers (intake, responsibilities, pulse, activity, household)
+│   │   ├── health/route.ts           Health check endpoint
+│   │   └── layout.tsx                Root layout
+│   ├── components/
+│   │   ├── ui/                       shadcn primitives
+│   │   ├── custom/                   App-specific components (nav, marketing sections, mobile shell)
+│   │   └── theme-provider.tsx
+│   ├── lib/
+│   │   ├── ai/client.ts              Anthropic API client (chat/streamChat/generateObject)
+│   │   ├── business/                 Domain logic (intake, responsibility, pulse, risk, activity)
+│   │   ├── contracts/                Shared Zod schemas (client + server)
+│   │   ├── db.ts                     Prisma singleton
+│   │   ├── env.ts                    Typed environment validation
+│   │   └── seed.ts                   Idempotent demo-data seed
+│   └── instrumentation.ts            Runs the seed once on server boot
+├── tests/unit/                       Vitest unit tests
+├── next.config.ts                    Next config and security headers
+└── proxy.ts                          CSP nonce + middleware chain
+```
+
+## Security headers
+
+`next.config.ts` sets baseline response headers (`Strict-Transport-Security`,
+`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy`, `Cross-Origin-Opener-Policy`,
+`Cross-Origin-Resource-Policy`). `proxy.ts` sets a per-request Content
+Security Policy with a nonce and `strict-dynamic` on `script-src`.
+
+## Data plane
+
+Client pages call `/api/*` route handlers through `apiFetch`
+(`src/lib/api-client.ts`), passing a shared Zod schema (from
+`src/lib/contracts/`) to validate the response at runtime. There are no
+Server Actions — all mutations go through route handlers.
 
 ## License
 

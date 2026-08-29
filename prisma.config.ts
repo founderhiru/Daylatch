@@ -8,8 +8,8 @@
 //
 // A Prisma config file disables Prisma's automatic `.env` loading, so we restore
 // it for local dev (`db:migrate:dev` reads `DATABASE_URL` from `.env`). In a
-// Polsia deploy `DATABASE_URL` is injected as a real process env var, so the
-// `dotenv` import is then a harmless no-op.
+// production deploy (e.g. Vercel) `DATABASE_URL` is injected as a real process
+// env var, so the `dotenv` import is then a harmless no-op.
 import 'dotenv/config';
 import path from 'node:path';
 import { defineConfig } from 'prisma/config';

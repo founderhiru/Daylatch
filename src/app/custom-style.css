@@ -1,3 +1,135 @@
 /* @polsia:user-owned — your custom global CSS: keyframes, animation classes, one-off global
  * styles, and @import your own .css files. Prefer tw-animate-css for motion (animate-in,
  * fade-in, slide-in-from-bottom-N, duration-*). globals.css is framework-owned — edit HERE. */
+
+/* NOTE on fonts: the Lovable reference loads Source Serif 4 + DM Sans from
+ * Google Fonts. That is NOT done here — a cross-origin stylesheet (whether
+ * via CSS @import or a <link> in head-content.tsx) is blocked by the
+ * framework-owned CSP (src/lib/csp.ts: `style-src 'self' 'unsafe-inline'`,
+ * no external hosts, and cspExtraSources has no styleSrc seam — see
+ * AGENTS.md: "script-src/style-src wildcards are deliberately not
+ * openable"). It would silently fail to load in production. The system font
+ * stack below approximates the same serif-display / sans-body distinction
+ * with zero external requests. To use the real Lovable fonts, self-host them
+ * via next/font/google — that requires applying the font's `.variable` class
+ * on <html>/<body> in the framework-owned src/app/layout.tsx, which needs a
+ * human decision (either a template upgrade adds that seam, or the app
+ * explicitly ejects layout.tsx) — flagged as a follow-up, not done here.
+ */
+
+/* Daylatch semantic status tokens. These have no equivalent in the
+ * framework-derived brand ramp (background/foreground/primary/etc.), so they
+ * are declared fresh here rather than in globals.css's brand_tokens slot.
+ * Modeled on the Lovable reference design (home-harmony-layer/src/styles.css). */
+@theme {
+  --color-surface: var(--daylatch-surface);
+  --color-surface-raised: var(--daylatch-surface-raised);
+  --color-hairline: var(--daylatch-hairline);
+
+  --color-attention: var(--daylatch-attention);
+  --color-attention-soft: var(--daylatch-attention-soft);
+  --color-waiting: var(--daylatch-waiting);
+  --color-waiting-soft: var(--daylatch-waiting-soft);
+  --color-handled: var(--daylatch-handled);
+  --color-handled-soft: var(--daylatch-handled-soft);
+  --color-at-risk: var(--daylatch-at-risk);
+  --color-at-risk-soft: var(--daylatch-at-risk-soft);
+}
+
+:root {
+  --daylatch-surface: oklch(0.993 0.004 90);
+  --daylatch-surface-raised: oklch(1 0 0);
+  --daylatch-hairline: oklch(0.925 0.008 80);
+
+  --daylatch-attention: oklch(0.53 0.17 30);
+  --daylatch-attention-soft: oklch(0.955 0.028 40);
+  --daylatch-waiting: oklch(0.62 0.11 75);
+  --daylatch-waiting-soft: oklch(0.965 0.03 85);
+  --daylatch-handled: oklch(0.5 0.075 155);
+  --daylatch-handled-soft: oklch(0.958 0.024 155);
+  /* At-risk is distinct from "attention" — a deeper red signals the
+     deterministic overdue/stalled/no-owner rules in src/lib/business/risk.ts. */
+  --daylatch-at-risk: oklch(0.5 0.2 20);
+  --daylatch-at-risk-soft: oklch(0.95 0.035 20);
+
+  --daylatch-shadow-card:
+    0 1px 2px oklch(0.3 0.02 45 / 0.04), 0 12px 32px -18px oklch(0.3 0.02 45 / 0.28);
+  --daylatch-shadow-float:
+    0 2px 4px oklch(0.3 0.02 45 / 0.05), 0 40px 80px -40px oklch(0.3 0.02 45 / 0.35);
+  --daylatch-gradient-paper: radial-gradient(
+    120% 90% at 50% -10%,
+    oklch(0.965 0.024 45 / 0.75) 0%,
+    oklch(0.985 0.006 85 / 0) 60%
+  );
+}
+
+.dark {
+  --daylatch-surface: oklch(0.2 0.012 var(--brand-h));
+  --daylatch-surface-raised: oklch(0.23 0.014 var(--brand-h));
+  --daylatch-hairline: oklch(1 0 0 / 8%);
+
+  --daylatch-attention: oklch(0.68 0.16 30);
+  --daylatch-attention-soft: oklch(0.3 0.06 30);
+  --daylatch-waiting: oklch(0.75 0.1 80);
+  --daylatch-waiting-soft: oklch(0.3 0.045 80);
+  --daylatch-handled: oklch(0.72 0.09 155);
+  --daylatch-handled-soft: oklch(0.28 0.045 155);
+  --daylatch-at-risk: oklch(0.68 0.18 22);
+  --daylatch-at-risk-soft: oklch(0.3 0.06 22);
+
+  --daylatch-shadow-card: 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 32px -18px oklch(0 0 0 / 0.55);
+  --daylatch-shadow-float: 0 2px 4px oklch(0 0 0 / 0.35), 0 40px 80px -40px oklch(0 0 0 / 0.6);
+  --daylatch-gradient-paper: radial-gradient(
+    120% 90% at 50% -10%,
+    oklch(0.3 0.03 45 / 0.5) 0%,
+    oklch(0.16 0.012 45 / 0) 60%
+  );
+}
+
+@utility shadow-card {
+  box-shadow: var(--daylatch-shadow-card);
+}
+
+@utility shadow-float {
+  box-shadow: var(--daylatch-shadow-float);
+}
+
+@utility paper-glow {
+  background-image: var(--daylatch-gradient-paper);
+}
+
+@utility eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+}
+
+@keyframes daylatch-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@utility animate-rise {
+  animation: daylatch-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Reserves space at the bottom of product-surface pages (dashboard,
+ * household, activity, capture, responsibility detail) so their content
+ * isn't hidden behind the fixed MobileBottomNav (src/components/custom/
+ * mobile-nav.tsx). The nav toggles `has-mobile-nav` on <body> itself — see
+ * that file for why layout.tsx (framework-owned) can't do this directly.
+ * Scoped to mobile widths (matches Tailwind's `md` breakpoint) since the
+ * bottom nav is `md:hidden` and desktop pages need no reserved space. */
+@media (max-width: 767px) {
+  body.has-mobile-nav {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}
