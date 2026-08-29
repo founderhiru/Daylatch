@@ -35,7 +35,7 @@ export async function seed(): Promise<void> {
     update: {},
   });
 
-  const [dad, mom] = await Promise.all(
+  const members = await Promise.all(
     [
       { displayName: 'Dad', role: 'Dad' },
       { displayName: 'Mom', role: 'Mom' },
@@ -50,9 +50,22 @@ export async function seed(): Promise<void> {
       }),
     ),
   );
-if (!dad || !mom) {
-  throw new Error('Failed to create demo household members');
-}
+
+  // Resolved by name rather than array position: `noUncheckedIndexedAccess`
+  // (tsconfig.json) types array elements/destructures as possibly
+  // `undefined`, and `.find()` makes that honest instead of asserting it
+  // away. One guard, right where the narrowing is needed — `dad`/`mom` are
+  // `HouseholdMember` (not `| undefined`) everywhere below this point.
+  // Explicit param type (not inferred) because prisma.householdMember.upsert()
+  // is untyped until `prisma generate` runs (see the module's Prisma-status
+  // note) — matches the same explicit-row-type pattern already used in
+  // src/lib/business/*.ts for the same reason.
+  const dad = members.find((m: { displayName: string }) => m.displayName === 'Dad');
+  const mom = members.find((m: { displayName: string }) => m.displayName === 'Mom');
+  if (!dad || !mom) {
+    throw new Error('Failed to create demo household members');
+  }
+
   const daysFromNow = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000);
   const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
@@ -70,9 +83,6 @@ if (!dad || !mom) {
     create: { name: 'CityNet Broadband', domain: 'home' },
     update: {},
   });
-    if (!dad || !mom) {
-  throw new Error('Failed to create demo household members');
-}
 
   const demoResponsibilities = [
     {
@@ -80,7 +90,7 @@ if (!dad || !mom) {
       description: 'Policy MH-02-8841 renewal quote of ₹18,400.',
       category: 'bill' as const,
       domain: 'car' as const,
-      ownerId: dad!.id,
+      ownerId: dad.id,
       providerId: insurer.id,
       stage: 'active' as const,
       priority: 3,
@@ -139,7 +149,7 @@ if (!dad || !mom) {
       description: 'Annual plan renewed.',
       category: 'bill' as const,
       domain: 'home' as const,
-      ownerId: dad!.id,
+      ownerId: dad.id,
       providerId: broadband.id,
       amount: 1200,
       stage: 'completed' as const,

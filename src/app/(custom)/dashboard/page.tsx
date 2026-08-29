@@ -13,6 +13,7 @@
 'use client';
 
 import { AlertTriangle, CheckCircle2, Clock3, Sparkles, UserRound } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -20,6 +21,7 @@ import {
   StatusChip,
   StatusDot,
   type StatusTone,
+  toneForResponsibility,
 } from '@/components/custom/daylatch-primitives';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,16 +49,6 @@ const DOMAIN_LABEL: Record<ResponsibilityItem['domain'], string> = {
   travel: 'Travel',
   other: 'Other',
 };
-
-function toneForResponsibility(item: ResponsibilityItem): StatusTone {
-  if (item.stage === 'completed') return 'handled';
-  if (item.isAtRisk) return 'at_risk';
-  if (item.isWaiting) return 'waiting';
-  if (item.stage === 'received' || item.stage === 'understood' || item.stage === 'assigned') {
-    return 'attention';
-  }
-  return 'neutral';
-}
 
 function formatDate(value: string | null): string | null {
   if (!value) return null;
@@ -154,6 +146,80 @@ function ResponsibilityRow({
         <OwnerControl item={item} members={members} onChanged={onChanged} />
       </div>
     </div>
+  );
+}
+
+/** Lighter-weight row for the mobile HOME list — same data, same
+ * StatusDot/OwnerControl/PersonAvatar as the desktop ResponsibilityRow, but
+ * a plain divider instead of a bordered card box, per "avoid excessive
+ * borders/cards" for the mobile product surface. */
+function MobileResponsibilityRow({
+  item,
+  members,
+  onChanged,
+}: {
+  item: ResponsibilityItem;
+  members: HouseholdItem['members'];
+  onChanged: (updated: ResponsibilityItem) => void;
+}) {
+  const tone = toneForResponsibility(item);
+  const due = formatDate(item.dueAt);
+
+  return (
+    <div className="flex items-start gap-3 border-b border-border/50 py-3 last:border-0">
+      <span className="mt-1.5">
+        <StatusDot tone={tone} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <Link href={`/responsibilities/${item.id}`} className="block">
+          <p className="truncate text-[13.5px] font-medium">{item.title}</p>
+          <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+            {item.nextStep ?? 'No next step recorded yet.'}
+            {due ? ` · Due ${due}` : ''}
+          </p>
+        </Link>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {item.ownerName ? <PersonAvatar name={item.ownerName} /> : null}
+        <OwnerControl item={item} members={members} onChanged={onChanged} />
+      </div>
+    </div>
+  );
+}
+
+/** A priority bucket on the mobile HOME list. Renders nothing when empty —
+ * an empty section header would just add visual noise ("less information,
+ * better organized"). */
+function MobileHomeSection({
+  title,
+  tone,
+  items,
+  members,
+  onChanged,
+}: {
+  title: string;
+  tone: StatusTone;
+  items: ResponsibilityItem[];
+  members: HouseholdItem['members'];
+  onChanged: (updated: ResponsibilityItem) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section>
+      <p className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-foreground uppercase">
+        <StatusDot tone={tone} /> {title}
+      </p>
+      <div className="mt-1">
+        {items.map((item) => (
+          <MobileResponsibilityRow
+            key={item.id}
+            item={item}
+            members={members}
+            onChanged={onChanged}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -300,6 +366,24 @@ export default function DashboardPage() {
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 6);
 
+  // --- Mobile HOME priority buckets (Phase 1.2) ---
+  // Presentation-only re-slicing of the SAME `responsibilities` array above —
+  // no new API call, no new domain rule. Mutually exclusive and evaluated in
+  // priority order (overdue first) so a mobile visitor sees one clean list
+  // instead of the four-column desktop grid. "Things needing the current
+  // user" is intentionally NOT implemented: there is no authenticated user
+  // yet (see the demo-mode notice below), and faking one would misattribute
+  // ownership — this section returns once a real auth module exists.
+  const isOverdue = (r: ResponsibilityItem) =>
+    r.stage !== 'completed' && r.dueAt !== null && new Date(r.dueAt).getTime() < Date.now();
+  const mobileOverdue = responsibilities.filter((r) => isOverdue(r));
+  const mobileUnassigned = responsibilities.filter(
+    (r) => r.stage !== 'completed' && r.ownerId === null && !isOverdue(r),
+  );
+  const mobileNeedsAttention = needsAttention.filter((r) => !isOverdue(r) && !(r.ownerId === null));
+  const mobileUpcoming = upcoming;
+  const mobileWaiting = waiting;
+
   const members = household?.members ?? [];
 
   return (
@@ -351,7 +435,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-8 hidden gap-3 sm:grid-cols-2 md:grid lg:grid-cols-5">
             <PulseTile
               icon={AlertTriangle}
               label="Needs attention"
@@ -384,7 +468,53 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          {/* Mobile HOME: a single, priority-ordered list (Phase 1.2) — see
+              the bucket computation above. Hidden at md+ where the existing,
+              already-approved four-column grid below takes over unchanged. */}
+          <div className="mt-6 space-y-5 md:hidden">
+            <MobileHomeSection
+              title="Overdue"
+              tone="at_risk"
+              items={mobileOverdue}
+              members={members}
+              onChanged={handleChanged}
+            />
+            <MobileHomeSection
+              title="Unassigned"
+              tone="attention"
+              items={mobileUnassigned}
+              members={members}
+              onChanged={handleChanged}
+            />
+            <MobileHomeSection
+              title="Needs attention"
+              tone="attention"
+              items={mobileNeedsAttention}
+              members={members}
+              onChanged={handleChanged}
+            />
+            <MobileHomeSection
+              title="Upcoming"
+              tone="neutral"
+              items={mobileUpcoming}
+              members={members}
+              onChanged={handleChanged}
+            />
+            <MobileHomeSection
+              title="Waiting"
+              tone="waiting"
+              items={mobileWaiting}
+              members={members}
+              onChanged={handleChanged}
+            />
+            {responsibilities.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-[12.5px] text-muted-foreground">
+                Nothing here yet — tap “+” to add something to your household.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-6 hidden gap-4 md:grid lg:grid-cols-2">
             <GroupCard
               title="Needs attention"
               tone="attention"
@@ -419,7 +549,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          <Card className="mt-6 border-border/80 bg-surface-raised shadow-card">
+          <Card className="mt-6 hidden border-border/80 bg-surface-raised shadow-card md:block">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-[11px] font-semibold tracking-wide uppercase">
                 <UserRound className="size-3.5" aria-hidden="true" /> Household memory

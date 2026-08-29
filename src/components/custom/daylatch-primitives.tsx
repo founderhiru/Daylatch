@@ -60,6 +60,27 @@ export function SectionHeading({
  */
 export type StatusTone = 'attention' | 'waiting' | 'handled' | 'at_risk' | 'neutral';
 
+/**
+ * The shared tone rule for a Responsibility, used consistently across Home,
+ * Responsibility Detail, and Household. Kept here rather than duplicated per
+ * page — this is presentation logic (which color a responsibility shows as),
+ * not a domain rule; the actual at-risk/waiting computation lives server-side
+ * in src/lib/business/risk.ts and arrives pre-computed on the contract.
+ */
+export function toneForResponsibility(item: {
+  stage: string;
+  isAtRisk: boolean;
+  isWaiting: boolean;
+}): StatusTone {
+  if (item.stage === 'completed') return 'handled';
+  if (item.isAtRisk) return 'at_risk';
+  if (item.isWaiting) return 'waiting';
+  if (item.stage === 'received' || item.stage === 'understood' || item.stage === 'assigned') {
+    return 'attention';
+  }
+  return 'neutral';
+}
+
 const toneMap: Record<StatusTone, { dot: string; chip: string }> = {
   attention: { dot: 'bg-attention', chip: 'bg-attention-soft text-attention' },
   waiting: { dot: 'bg-waiting', chip: 'bg-waiting-soft text-waiting' },

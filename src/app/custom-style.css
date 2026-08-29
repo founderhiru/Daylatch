@@ -120,3 +120,16 @@
 @utility animate-rise {
   animation: daylatch-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* Reserves space at the bottom of product-surface pages (dashboard,
+ * household, activity, capture, responsibility detail) so their content
+ * isn't hidden behind the fixed MobileBottomNav (src/components/custom/
+ * mobile-nav.tsx). The nav toggles `has-mobile-nav` on <body> itself — see
+ * that file for why layout.tsx (framework-owned) can't do this directly.
+ * Scoped to mobile widths (matches Tailwind's `md` breakpoint) since the
+ * bottom nav is `md:hidden` and desktop pages need no reserved space. */
+@media (max-width: 767px) {
+  body.has-mobile-nav {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}
