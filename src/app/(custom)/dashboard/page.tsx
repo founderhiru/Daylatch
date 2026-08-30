@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch } from '@/lib/api-client';
+import { buildDailyBriefing } from '@/lib/business/pulse-rules';
 import { type ActivityItem, ActivityList } from '@/lib/contracts/activity';
 import { HouseholdItem } from '@/lib/contracts/household';
 import { PulseSummary } from '@/lib/contracts/pulse';
@@ -385,6 +386,7 @@ export default function DashboardPage() {
   const mobileWaiting = waiting;
 
   const members = household?.members ?? [];
+  const briefing = pulse ? buildDailyBriefing(pulse) : null;
 
   return (
     <main className="container-page section-lg mx-auto">
@@ -396,7 +398,9 @@ export default function DashboardPage() {
 
       <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[12.5px] text-muted-foreground">Good afternoon</p>
+          <p className="text-[12.5px] text-muted-foreground">
+            {briefing ? briefing.greeting : 'Good day.'}
+          </p>
           <h1 className="mt-1 font-display text-h3 tracking-tight">
             {isLoading
               ? 'Loading your household…'
@@ -404,14 +408,27 @@ export default function DashboardPage() {
                 ? householdStateSentence(pulse)
                 : 'Household state unavailable.'}
           </h1>
-          {!isLoading && pulse && pulse.highlights.length > 0 ? (
-            <ul className="mt-2 space-y-0.5">
-              {pulse.highlights.map((h) => (
-                <li key={h} className="text-[12.5px] text-muted-foreground">
-                  {h}
-                </li>
-              ))}
-            </ul>
+          {!isLoading && pulse && briefing ? (
+            <>
+              {briefing.lines.length > 0 ? (
+                <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+                  {briefing.lines.join(' ')}
+                </p>
+              ) : (
+                <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+                  Nothing needs attention right now.
+                </p>
+              )}
+              {pulse.highlights.length > 0 ? (
+                <ul className="mt-2 space-y-0.5">
+                  {pulse.highlights.map((h) => (
+                    <li key={h} className="text-[12.5px] text-muted-foreground">
+                      {h}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
           ) : null}
         </div>
         <div className="flex items-center gap-1.5">

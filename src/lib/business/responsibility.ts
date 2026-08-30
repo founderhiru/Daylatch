@@ -325,8 +325,12 @@ export async function createResponsibilityFromIntake(
       domain: confirm.domain,
       ownerId: confirm.ownerId ?? null,
       providerId,
+      // Falls back to the model default (2) when the AI couldn't form a
+      // priority judgment — see IntakeResult.priority's comment.
+      priority: confirm.priority ?? undefined,
+      amount: confirm.amount ?? null,
       nextStep: confirm.nextStep,
-      sourceType: 'pasted_text',
+      sourceType: confirm.sourceType,
       stage: 'understood',
     },
     include: RESPONSIBILITY_INCLUDE,

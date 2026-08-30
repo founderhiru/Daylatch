@@ -46,11 +46,26 @@ export const IntakeConfirm = z.object({
   deadline: z.string().trim().max(120).nullable(),
   nextStep: z.string().trim().min(1).max(500),
   missingInformation: z.array(z.string().trim().min(1).max(240)).max(12),
-  /// Optional explicit owner assignment at confirmation time.
+  /// Optional explicit owner assignment at confirmation time. May start out
+  /// pre-filled from IntakeResult.suggestedOwnerId, but arrives here only
+  /// once the human has seen and kept (or changed) it — never written
+  /// automatically before this point.
   ownerId: z.string().trim().min(1).nullable().optional(),
   /// Optional explicit provider name at confirmation time — get-or-create
   /// by name (src/lib/business/responsibility.ts); never silently inferred.
   providerName: z.string().trim().min(1).max(120).optional(),
+  /// From IntakeResult.priority, carried through if the human didn't clear
+  /// it. Falls back to the Responsibility model's own default (2) when
+  /// absent — see createResponsibilityFromIntake.
+  priority: z.number().int().min(1).max(3).nullable().optional(),
+  /// From IntakeResult.amount, carried through as-is.
+  amount: z.number().nonnegative().max(10_000_000).nullable().optional(),
+  /// Which capture path produced this draft — 'pasted_text' (default, the
+  /// existing /try and typed /capture flow) or 'document_upload' (the
+  /// Scan/Upload image-capture flow). Never anything else from this
+  /// endpoint; voice/email/whatsapp/calendar remain unused until those
+  /// capture paths actually exist.
+  sourceType: z.enum(['pasted_text', 'document_upload']).default('pasted_text'),
 });
 
 export type IntakeConfirm = z.infer<typeof IntakeConfirm>;
