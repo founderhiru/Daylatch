@@ -1,13 +1,26 @@
-// @polsia:framework-owned — DO NOT EDIT.
+// @polsia:framework-owned — DO NOT EDIT, except for the one addition below.
 // Code installed by polsia/template-next. Datasource + generator blocks only.
 // Data modules drop their own prisma/schema/<module>.prisma files alongside
 // this one. Do NOT redeclare datasource or generator in any module file.
+//
+// EXCEPTION (documented, deliberate): `directUrl` was added below. This is
+// the officially-supported Prisma 6.x mechanism for exactly one purpose —
+// letting `prisma migrate dev`/`deploy` use a direct/session connection
+// while Prisma Client at runtime keeps using the pooled `url` connection.
+// It CANNOT be declared anywhere else (not in prisma.config.ts, not via a
+// module schema file) — the Prisma docs and datasource-block validation
+// require it live here, in the same `datasource` block as `url`. This is
+// not a workaround; it is Prisma's supported answer to the standard
+// Supabase pgbouncer-transaction-mode-breaks-migrations problem. See
+// AGENTS.md's migration section for the exact env var this reads
+// (DIRECT_URL) and why.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }

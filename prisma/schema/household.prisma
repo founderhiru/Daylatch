@@ -31,8 +31,7 @@ model Household {
   @@map("households")
 }
 
-/// A person in the household who can own responsibilities. Deliberately
-/// thin — no demographic/sensitive fields, no auth linkage yet. `role` is a
+/// A person in the household who can own responsibilities. `role` is a
 /// free-text relationship label (e.g. "Dad", "Mom", "Roommate") rather than a
 /// permissions role — this is responsibility ownership, not security
 /// authorization.
@@ -43,6 +42,14 @@ model HouseholdMember {
   /// Free-text relationship/role label shown in the UI (e.g. "Dad", "Mom").
   /// Intentionally NOT an enum — households describe members differently.
   role        String?
+  /// Supabase Auth user id (auth.users.id, a UUID) for the person who logs
+  /// in as this member — nullable because most households have members
+  /// (kids, grandparents) who never authenticate directly. Unique because
+  /// one auth account maps to exactly one household member: this is the
+  /// seam src/lib/auth/session.ts resolves a request's household through.
+  /// Demo-mode rows (seeded by src/lib/seed.ts) are left null on purpose —
+  /// they are not tied to any real account.
+  authUserId  String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -189,7 +196,6 @@ model Responsibility {
   /// avoids duplicating whatever future source-adapter tables store.
   sourceReference String?
 
-  authUserId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
