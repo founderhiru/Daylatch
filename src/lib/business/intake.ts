@@ -42,15 +42,23 @@ Respond with JSON only — no prose, no markdown fences.`;
  * same resilience pattern {@link generateObject} already uses internally,
  * needed here too since {@link analyzeImage} returns a raw string with no
  * built-in JSON handling. */
+function stripMarkdownFences(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+}
+
 async function parseIntakeResultWithRetry(
   raw: string,
   retry: () => Promise<string>,
 ): Promise<IntakeResultType> {
   try {
-    return IntakeResult.parse(normalizeIntakeRaw(JSON.parse(raw)));
+    return IntakeResult.parse(normalizeIntakeRaw(JSON.parse(stripMarkdownFences(raw))));
   } catch {
     const retryRaw = await retry();
-    return IntakeResult.parse(normalizeIntakeRaw(JSON.parse(retryRaw)));
+    return IntakeResult.parse(normalizeIntakeRaw(JSON.parse(stripMarkdownFences(retryRaw))));
   }
 }
 
