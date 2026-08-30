@@ -189,6 +189,7 @@ model Responsibility {
   /// avoids duplicating whatever future source-adapter tables store.
   sourceReference String?
 
+  authUserId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
