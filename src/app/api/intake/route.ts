@@ -78,12 +78,13 @@ export async function POST(request: Request) {
 
   const { sourceText, imageDataUrl } = parsed.data;
 
-  try {
+    try {
     const result = imageDataUrl
       ? IntakeResult.parse(await extractIntakeFromImage(imageDataUrl, sourceText))
       : IntakeResult.parse(await extractIntake(sourceText));
     return NextResponse.json(await withSuggestedOwner(result), { status: 200 });
-  } catch {
+  } catch (error) {
+    console.error('[api/intake] extraction failed:', error);
     return NextResponse.json(
       {
         error: imageDataUrl
