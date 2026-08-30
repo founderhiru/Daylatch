@@ -57,7 +57,6 @@ async function parseIntakeResultWithRetry(
 export async function extractIntake(sourceText: string): Promise<IntakeResultType> {
   const result = await generateObject<unknown>({
     task: 'daylatch-intake-extraction',
-    temperature: 0.1,
     messages: [
       { role: 'system', content: TEXT_EXTRACTION_INSTRUCTIONS },
       {
