@@ -1,0 +1,446 @@
+diff --git a/src/app/(custom)/capture/page.tsx b/src/app/(custom)/capture/page.tsx
+index 15644de..3d250f0 100644
+--- a/src/app/(custom)/capture/page.tsx
++++ b/src/app/(custom)/capture/page.tsx
+@@ -8,10 +8,11 @@
+ // Five capture methods are presented (Scan/Upload/Share/Tell/Type) per the
+ // product brief, but only three are wired to real behavior in this phase:
+ //   - Type: unchanged text flow.
+-//   - Scan / Upload: both resolve to an image file -> POST /api/intake with
+-//     imageDataUrl -> src/lib/business/intake.ts's extractIntakeFromImage().
+-//     PDFs are explicitly rejected client-side (see PDF NOTE on that
+-//     function) rather than silently mishandled.
++//   - Scan / Upload: both resolve to a file -> POST /api/intake with
++//     imageDataUrl -> src/lib/business/intake.ts's extractIntakeFromImage(),
++//     which supports both images and PDFs (src/lib/ai/client.ts's
++//     toAnthropicMediaBlock() detects the media type and builds the right
++//     Anthropic content block for either).
+ //   - Share / Tell: intentionally inert "coming soon" tiles. Web Share
+ //     Target and voice capture are separate, later phases (8 and 9) — see
+ //     AGENTS.md and the phase brief. They are shown (not hidden) so the
+@@ -19,7 +20,17 @@
+ //     everything at once."
+ 'use client';
+ 
+-import { ArrowLeft, Camera, Check, Mic, Share2, Sparkles, Type, Upload } from 'lucide-react';
++import {
++  ArrowLeft,
++  Camera,
++  Check,
++  FileText,
++  Mic,
++  Share2,
++  Sparkles,
++  Type,
++  Upload,
++} from 'lucide-react';
+ import Link from 'next/link';
+ import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react';
+ import { toast } from 'sonner';
+@@ -119,6 +130,8 @@ export default function CapturePage() {
+   // held separately so the preview can use a cheap object URL instead.
+   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
++  const [pickedFileName, setPickedFileName] = useState<string | null>(null);
++  const [pickedIsPdf, setPickedIsPdf] = useState(false);
+   const [imageCaption, setImageCaption] = useState('');
+   const scanInputRef = useRef<HTMLInputElement>(null);
+   const uploadInputRef = useRef<HTMLInputElement>(null);
+@@ -182,24 +195,29 @@ export default function CapturePage() {
+     event.target.value = ''; // allow re-picking the same file later
+     if (!file) return;
+ 
+-    if (file.type === 'application/pdf') {
+-      toast.error("PDFs aren't supported yet — try a screenshot or photo of the document instead.");
+-      return;
+-    }
+-    if (!file.type.startsWith('image/')) {
+-      toast.error('Please choose a photo, screenshot, or image file.');
++    if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
++      toast.error('Please choose a photo, screenshot, image, or PDF file.');
+       return;
+     }
+     // Rough pre-check before base64 encoding grows the payload ~33%.
+     if (file.size > INTAKE_IMAGE_MAX_LENGTH * 0.7) {
+-      toast.error('That image is too large. Try a smaller photo or a cropped screenshot.');
++      toast.error(
++        'That file is too large. Try a smaller photo, a cropped screenshot, or a shorter PDF.',
++      );
+       return;
+     }
+ 
+     try {
+       const dataUrl = await readFileAsDataUrl(file);
++      const isPdf = file.type === 'application/pdf';
+       setImageDataUrl(dataUrl);
+-      setImagePreviewUrl(URL.createObjectURL(file));
++      // A PDF has no meaningful <img> preview — an object URL to a PDF blob
++      // just renders as a broken image icon, so it's skipped entirely and
++      // the review screen shows a filename chip instead (see the isPdf
++      // branch in the review-step JSX below).
++      setImagePreviewUrl(isPdf ? null : URL.createObjectURL(file));
++      setPickedFileName(file.name);
++      setPickedIsPdf(isPdf);
+       setImageCaption('');
+       setMode('image');
+     } catch {
+@@ -279,6 +297,8 @@ export default function CapturePage() {
+     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+     setImageDataUrl(null);
+     setImagePreviewUrl(null);
++    setPickedFileName(null);
++    setPickedIsPdf(false);
+     setImageCaption('');
+   };
+ 
+@@ -414,6 +434,11 @@ export default function CapturePage() {
+               alt="Selected capture"
+               className="mt-4 max-h-80 w-full rounded-xl border border-border object-contain"
+             />
++          ) : pickedIsPdf ? (
++            <div className="mt-4 flex items-center gap-3 rounded-xl border border-border bg-surface-raised p-4">
++              <FileText className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
++              <span className="truncate text-[13px] text-foreground">{pickedFileName}</span>
++            </div>
+           ) : null}
+           <Label htmlFor="capture-caption" className="mt-4 block text-xs text-muted-foreground">
+             Add a note (optional)
+diff --git a/src/app/api/intake/route.ts b/src/app/api/intake/route.ts
+index 78daacd..2e8c3d5 100644
+--- a/src/app/api/intake/route.ts
++++ b/src/app/api/intake/route.ts
+@@ -78,12 +78,13 @@ export async function POST(request: Request) {
+ 
+   const { sourceText, imageDataUrl } = parsed.data;
+ 
+-    try {
++  try {
+     const result = imageDataUrl
+       ? IntakeResult.parse(await extractIntakeFromImage(imageDataUrl, sourceText))
+       : IntakeResult.parse(await extractIntake(sourceText));
+     return NextResponse.json(await withSuggestedOwner(result), { status: 200 });
+   } catch (error) {
++    // biome-ignore lint/suspicious/noConsole: intentional server-side error visibility — the JSON response below deliberately hides the technical detail from the client, so this is the only place the real cause is recorded.
+     console.error('[api/intake] extraction failed:', error);
+     return NextResponse.json(
+       {
+diff --git a/src/lib/ai/client.ts b/src/lib/ai/client.ts
+index b6d2e43..f70d3e9 100644
+--- a/src/lib/ai/client.ts
++++ b/src/lib/ai/client.ts
+@@ -12,9 +12,12 @@
+ // change again, not any business logic.
+ import 'server-only';
+ import Anthropic from '@anthropic-ai/sdk';
++import { stripMarkdownFences, toAnthropicMediaBlock } from '@/lib/ai/media';
+ import type { ChatMessage } from '@/lib/ai/schema';
+ import { env } from '@/lib/env';
+ 
++export { stripMarkdownFences } from '@/lib/ai/media';
++
+ export class AiConfigurationError extends Error {
+   constructor(message = 'AI is not configured for this app.') {
+     super(message);
+@@ -67,17 +70,6 @@ function getClient(): Anthropic {
+   return new Anthropic({ apiKey: anthropicApiKey() });
+ }
+ 
+-/** Anthropic's image content block, as accepted by the Messages API. Only
+- * `url` sources are produced here since that's all `AnalyzeImageOptions`
+- * carries; Anthropic has no `detail` (low/high/auto) concept, so it is
+- * silently dropped rather than approximated. */
+-function toAnthropicImageBlock(part: Extract<ContentPart, { type: 'image_url' }>) {
+-  return {
+-    type: 'image' as const,
+-    source: { type: 'url' as const, url: part.image_url.url },
+-  };
+-}
+-
+ /**
+  * Anthropic's Messages API takes `system` as a separate top-level string,
+  * not a `system`-role message in the array (unlike the OpenAI shape this
+@@ -105,7 +97,7 @@ function toAnthropicRequest(messages: LlmMessage[]): {
+         content: message.content.map((part) =>
+           part.type === 'text'
+             ? { type: 'text' as const, text: part.text }
+-            : toAnthropicImageBlock(part),
++            : toAnthropicMediaBlock(part.image_url.url),
+         ),
+       });
+     }
+@@ -198,14 +190,16 @@ export async function streamChat(opts: ChatOptions): Promise<Response> {
+ 
+ /**
+  * Structured JSON output. Instructs the model (via the system prompt) to
+- * respond with JSON only, parses the result, and retries once with a
+- * stricter instruction on a parse failure — the same resilience pattern the
+- * Polsia-proxy version used, preserved as-is since it's provider-agnostic.
++ * respond with JSON only, strips any markdown fence Claude adds despite
++ * that instruction (see src/lib/ai/media.ts's stripMarkdownFences), parses
++ * the result, and retries once with a stricter instruction on a parse
++ * failure — the same resilience pattern the Polsia-proxy version used,
++ * preserved as-is since it's provider-agnostic.
+  */
+ export async function generateObject<T = unknown>(opts: ChatOptions): Promise<T> {
+   const raw = await chat({ ...opts, responseFormat: 'json_object' });
+   try {
+-    return JSON.parse(raw) as T;
++    return JSON.parse(stripMarkdownFences(raw)) as T;
+   } catch {
+     const retry = await chat({
+       ...opts,
+@@ -215,7 +209,7 @@ export async function generateObject<T = unknown>(opts: ChatOptions): Promise<T>
+         { role: 'system', content: 'Respond with valid JSON only. No prose, no markdown fences.' },
+       ],
+     });
+-    return JSON.parse(retry) as T;
++    return JSON.parse(stripMarkdownFences(retry)) as T;
+   }
+ }
+ 
+diff --git a/src/lib/ai/media.ts b/src/lib/ai/media.ts
+new file mode 100644
+index 0000000..8da0f4e
+--- /dev/null
++++ b/src/lib/ai/media.ts
+@@ -0,0 +1,87 @@
++// @polsia:user-owned — pure media-URL parsing and Anthropic content-block
++// building, extracted from src/lib/ai/client.ts so it's directly unit-
++// testable (no 'server-only', no live API calls). client.ts re-exports and
++// uses these; this file is the single source of truth for the logic.
++import type Anthropic from '@anthropic-ai/sdk';
++
++const SUPPORTED_IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
++type SupportedImageMediaType = (typeof SUPPORTED_IMAGE_MEDIA_TYPES)[number];
++
++function isSupportedImageMediaType(value: string): value is SupportedImageMediaType {
++  return (SUPPORTED_IMAGE_MEDIA_TYPES as readonly string[]).includes(value);
++}
++
++/**
++ * Detects a `data:<mediaType>;base64,<data>` URL and extracts its parts.
++ * Returns null for anything else (a real https:// URL, or a malformed
++ * data URL), so callers can fall back to URL-based handling.
++ */
++export function parseDataUrl(value: string): { mediaType: string; base64: string } | null {
++  const match = /^data:([^;,]+)(?:;charset=[^;,]+)?;base64,([\s\S]+)$/i.exec(value);
++  if (!match) return null;
++  const mediaType = match[1];
++  const base64 = match[2];
++  if (!mediaType || !base64) return null;
++  return { mediaType, base64 };
++}
++
++/**
++ * Builds the correct Anthropic content block for an image/document URL —
++ * this is the ONE place that decides url-source vs. base64-source vs.
++ * image vs. document, so every caller (analyzeImage today, any future
++ * multimodal caller) gets this right automatically instead of each one
++ * needing to know Anthropic's block shapes itself.
++ *
++ * THE BUG THIS FIXES: browser/mobile capture (src/app/(custom)/capture/
++ * page.tsx) produces `data:image/jpeg;base64,...` URLs, not real HTTP(S)
++ * URLs. The previous version always built a `{ source: { type: 'url' } }`
++ * block, so Anthropic tried to fetch a data: URL as if it were a web
++ * address and failed with "Unable to download the file." data: URLs are
++ * now parsed and sent as `{ source: { type: 'base64' } }` instead — the
++ * payload never leaves this process as a fake "download", which is also
++ * better for privacy (no temporary public URL is created just to hand
++ * Anthropic something fetchable).
++ *
++ * PDF support: a `data:application/pdf;base64,...` URL is sent as a
++ * `document` block (Anthropic's supported mechanism for PDFs), not
++ * misrepresented as an image. An unsupported image media type throws a
++ * clear, catchable error rather than silently sending a request Anthropic
++ * will reject.
++ */
++export function toAnthropicMediaBlock(url: string): Anthropic.ContentBlockParam {
++  const dataUrl = parseDataUrl(url);
++  if (dataUrl) {
++    if (dataUrl.mediaType === 'application/pdf') {
++      return {
++        type: 'document',
++        source: { type: 'base64', media_type: 'application/pdf', data: dataUrl.base64 },
++      };
++    }
++    if (!isSupportedImageMediaType(dataUrl.mediaType)) {
++      throw new Error(
++        `Unsupported image type "${dataUrl.mediaType}" — Daylatch supports JPEG, PNG, GIF, WebP, and PDF.`,
++      );
++    }
++    return {
++      type: 'image',
++      source: { type: 'base64', media_type: dataUrl.mediaType, data: dataUrl.base64 },
++    };
++  }
++  // A real HTTPS URL (or anything else not recognized as a data: URL) —
++  // only ever reached for genuine remote image URLs today; Anthropic can
++  // fetch these directly.
++  return { type: 'image', source: { type: 'url', url } };
++}
++
++/** Strips a leading/trailing ```json or ``` markdown fence from a raw model
++ * response, if present. Claude sometimes wraps JSON in fences even when
++ * explicitly told not to — this is the ONE place that normalizes for that,
++ * so every caller gets the same resilience instead of each needing its own
++ * copy of this logic. */
++export function stripMarkdownFences(raw: string): string {
++  return raw
++    .trim()
++    .replace(/^```(?:json)?\s*/i, '')
++    .replace(/```\s*$/i, '')
++    .trim();
++}
+diff --git a/src/lib/business/intake.ts b/src/lib/business/intake.ts
+index 86b9d41..4a69ed3 100644
+--- a/src/lib/business/intake.ts
++++ b/src/lib/business/intake.ts
+@@ -1,7 +1,7 @@
+ // @polsia:user-owned — server-only Daylatch intake extraction logic.
+ import 'server-only';
+ 
+-import { analyzeImage, generateObject } from '@/lib/ai/client';
++import { analyzeImage, generateObject, stripMarkdownFences } from '@/lib/ai/client';
+ import { normalizeIntakeRaw } from '@/lib/business/intake-normalize';
+ import { IntakeResult, type IntakeResult as IntakeResultType } from '@/lib/contracts/intake';
+ 
+@@ -38,18 +38,13 @@ ${FIELD_SPEC}
+ Respond with JSON only — no prose, no markdown fences.`;
+ 
+ /** Parses a raw model response as an {@link IntakeResultType}, with one retry
+- * (asking for stricter JSON-only output) on a parse/validation failure — the
+- * same resilience pattern {@link generateObject} already uses internally,
+- * needed here too since {@link analyzeImage} returns a raw string with no
+- * built-in JSON handling. */
+-function stripMarkdownFences(raw: string): string {
+-  return raw
+-    .trim()
+-    .replace(/^```(?:json)?\s*/i, '')
+-    .replace(/```\s*$/i, '')
+-    .trim();
+-}
+-
++ * (asking for stricter JSON-only output) on a parse/validation failure —
++ * mirrors {@link generateObject}'s resilience pattern in src/lib/ai/
++ * client.ts, needed here too since {@link analyzeImage} returns a raw
++ * string with no built-in JSON handling. Fence-stripping itself now lives
++ * in one place (client.ts's stripMarkdownFences) so this and generateObject
++ * can never drift into handling the same "Claude wrapped it in ```json"
++ * quirk two different ways. */
+ async function parseIntakeResultWithRetry(
+   raw: string,
+   retry: () => Promise<string>,
+@@ -84,14 +79,10 @@ export async function extractIntake(sourceText: string): Promise<IntakeResultTyp
+  * so the review/confirm UI and the confirmation endpoint don't need to know
+  * which capture path a draft came from.
+  *
+- * PDF NOTE: this only handles image data URLs today. analyzeImage() sends an
+- * `image_url` content block, which Anthropic's API accepts for image formats
+- * (PNG/JPEG/WebP/GIF) but not for PDFs — those need a separate `document`
+- * content block type that src/lib/ai/client.ts does not currently expose.
+- * Rather than add that capability speculatively, PDF uploads are rejected
+- * client-side (src/app/(custom)/capture/page.tsx) with an explicit
+- * "not supported yet" message. Wiring real PDF support later is a small,
+- * clearly-scoped addition to ai/client.ts, not a rebuild of this function.
++ * Handles both images (PNG/JPEG/WebP/GIF) and PDFs: src/lib/ai/client.ts's
++ * toAnthropicMediaBlock() inspects the data: URL's media type and builds
++ * the correct Anthropic content block (image vs. document) automatically —
++ * this function doesn't need to know or care which one it got.
+  */
+ export async function extractIntakeFromImage(
+   imageDataUrl: string,
+diff --git a/tests/unit/ai/media.test.ts b/tests/unit/ai/media.test.ts
+new file mode 100644
+index 0000000..9db2cf8
+--- /dev/null
++++ b/tests/unit/ai/media.test.ts
+@@ -0,0 +1,89 @@
++// @vitest-environment node
++import { describe, expect, it } from 'vitest';
++import { parseDataUrl, stripMarkdownFences, toAnthropicMediaBlock } from '@/lib/ai/media';
++
++describe('parseDataUrl', () => {
++  it('parses a base64 image data URL into media type and payload', () => {
++    expect(parseDataUrl('data:image/jpeg;base64,/9j/4AAQSkZJRg==')).toEqual({
++      mediaType: 'image/jpeg',
++      base64: '/9j/4AAQSkZJRg==',
++    });
++  });
++
++  it('parses a base64 PDF data URL', () => {
++    expect(parseDataUrl('data:application/pdf;base64,JVBERi0xLjQK')).toEqual({
++      mediaType: 'application/pdf',
++      base64: 'JVBERi0xLjQK',
++    });
++  });
++
++  it('returns null for a real https URL (not a data: URL)', () => {
++    expect(parseDataUrl('https://example.com/photo.jpg')).toBeNull();
++  });
++
++  it('returns null for a malformed data URL with no base64 payload', () => {
++    expect(parseDataUrl('data:image/jpeg;base64,')).toBeNull();
++  });
++});
++
++describe('toAnthropicMediaBlock', () => {
++  // Regression test for the actual production bug: a data: URL was being
++  // sent as a { source: { type: 'url' } } block, which Anthropic tries to
++  // fetch like a web address and fails with "Unable to download the file."
++  it('builds a base64 image block for a data:image/... URL, never a url-source block', () => {
++    const block = toAnthropicMediaBlock('data:image/png;base64,iVBORw0KGgo=');
++    expect(block).toEqual({
++      type: 'image',
++      source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
++    });
++  });
++
++  it('builds a document block for a data:application/pdf URL, not an image block', () => {
++    const block = toAnthropicMediaBlock('data:application/pdf;base64,JVBERi0xLjQK');
++    expect(block).toEqual({
++      type: 'document',
++      source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0xLjQK' },
++    });
++  });
++
++  it('builds a url-source image block for a genuine https URL', () => {
++    const block = toAnthropicMediaBlock('https://example.com/photo.jpg');
++    expect(block).toEqual({
++      type: 'image',
++      source: { type: 'url', url: 'https://example.com/photo.jpg' },
++    });
++  });
++
++  it('throws a clear error for an unsupported image media type rather than sending a doomed request', () => {
++    expect(() => toAnthropicMediaBlock('data:image/tiff;base64,AAAA')).toThrow(
++      /Unsupported image type/,
++    );
++  });
++
++  it('accepts every Anthropic-supported image media type', () => {
++    for (const mediaType of ['image/jpeg', 'image/png', 'image/gif', 'image/webp']) {
++      expect(() => toAnthropicMediaBlock(`data:${mediaType};base64,AAAA`)).not.toThrow();
++    }
++  });
++});
++
++describe('stripMarkdownFences', () => {
++  // Regression test for the actual production bug: Claude sometimes wraps
++  // JSON in ```json fences despite being told not to, and JSON.parse throws
++  // on the fence characters if they aren't stripped first.
++  it('strips a ```json ... ``` fence', () => {
++    expect(stripMarkdownFences('```json\n{"a":1}\n```')).toBe('{"a":1}');
++  });
++
++  it('strips a plain ``` ... ``` fence with no language tag', () => {
++    expect(stripMarkdownFences('```\n{"a":1}\n```')).toBe('{"a":1}');
++  });
++
++  it('leaves already-clean JSON untouched', () => {
++    expect(stripMarkdownFences('{"a":1}')).toBe('{"a":1}');
++  });
++
++  it('trims surrounding whitespace even with no fence present', () => {
++    expect(stripMarkdownFences('  \n{"a":1}\n  ')).toBe('{"a":1}');
++  });
++});

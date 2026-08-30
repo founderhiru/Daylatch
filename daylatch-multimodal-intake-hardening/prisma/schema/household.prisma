@@ -1,0 +1,238 @@
+// @polsia:user-owned — Household Operating Layer domain models.
+// Datasource + generator live ONLY in prisma/schema/_base.prisma
+// (framework-owned) — never redeclared here.
+//
+// Phase 2 established: Household, HouseholdMember, Responsibility, Activity.
+// This revision applies the approved north-star architecture correction: a
+// Responsibility's workflow STAGE (linear) is now separated from its
+// CONDITIONS (waiting, at-risk — which can be true simultaneously with any
+// stage, not a replacement for it). See src/lib/business/risk.ts for the
+// deterministic at-risk rules and src/lib/business/responsibility.ts for the
+// deterministic waiting-transition logic. No auth module is installed yet —
+// see src/lib/business/household.ts for the single demo-household seam.
+
+/// A household is the top-level container for everything Daylatch tracks.
+/// Kept intentionally small — no auth linkage yet (see file header).
+model Household {
+  id        String   @id @default(cuid())
+  /// Unique so the idempotent startup seed (src/lib/seed.ts) can upsert the
+  /// single demo household by name rather than risking a duplicate on every
+  /// boot. Real (non-demo) households, once an auth module exists, should
+  /// still keep this unique — display names colliding across households is
+  /// a UX problem worth catching at the DB layer too.
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members         HouseholdMember[]
+  responsibilities Responsibility[]
+  activities      Activity[]
+
+  @@map("households")
+}
+
+/// A person in the household who can own responsibilities. Deliberately
+/// thin — no demographic/sensitive fields, no auth linkage yet. `role` is a
+/// free-text relationship label (e.g. "Dad", "Mom", "Roommate") rather than a
+/// permissions role — this is responsibility ownership, not security
+/// authorization.
+model HouseholdMember {
+  id          String   @id @default(cuid())
+  householdId String
+  displayName String
+  /// Free-text relationship/role label shown in the UI (e.g. "Dad", "Mom").
+  /// Intentionally NOT an enum — households describe members differently.
+  role        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household              Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  ownedResponsibilities  Responsibility[] @relation("ResponsibilityOwner")
+
+  @@unique([householdId, displayName])
+  @@index([householdId])
+  @@map("household_members")
+}
+
+/// A lightweight lookup of service providers a household deals with
+/// (insurers, utilities, clinics, schools). Deliberately NOT a CRM — no
+/// contacts, addresses, accounts, or credentials. Its sole purpose is to
+/// support future structured household memory ("what provider did we use?")
+/// without re-parsing free text every time. Global, not per-household: a
+/// provider name ("Apex General Insurance") means the same thing regardless
+/// of which household references it.
+model Provider {
+  id        String                  @id @default(cuid())
+  /// Unique so business logic can upsert-by-name (get-or-create) instead of
+  /// accumulating duplicate rows for the same provider typed slightly
+  /// differently across responsibilities.
+  name      String                  @unique
+  domain    ResponsibilityDomain?
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  responsibilities Responsibility[]
+
+  @@map("providers")
+}
+
+/// Workflow STAGE only — linear, one value at a time. Waiting and at-risk
+/// are explicitly NOT stages (see the Responsibility model below): a
+/// responsibility can be `active` and waiting on a provider at the same
+/// time, which a single conflated enum could not express. `at_risk` was
+/// removed from this enum (north-star correction) because it was never
+/// actually persisted — every real at-risk determination has always been
+/// computed on read (src/lib/business/risk.ts), so keeping an unused enum
+/// value was a latent bug magnet (a future write path might have set it
+/// directly, creating two competing sources of truth for the same concept).
+enum ResponsibilityStage {
+  received
+  understood
+  assigned
+  active
+  completed
+}
+
+/// Intake/source-medium classification — what SHAPE the input was. Shared
+/// vocabulary with src/lib/contracts/intake.ts's IntakeCategory; kept in
+/// sync by hand (see src/lib/contracts/intake-to-responsibility.ts).
+enum ResponsibilityCategory {
+  email
+  bill
+  form
+  receipt
+  appointment
+  other
+}
+
+/// Household-life-area classification — what PART of household life this
+/// belongs to. Distinct from `category` above: two responsibilities with
+/// the same category (both "bill") can have different domains (electricity
+/// -> home, car insurance -> car). Explicitly human-set at intake
+/// confirmation time (see src/lib/contracts/intake-to-responsibility.ts) —
+/// never inferred by an additional AI call.
+enum ResponsibilityDomain {
+  car
+  school
+  health
+  home
+  finance
+  travel
+  other
+}
+
+/// Controlled vocabulary for where a responsibility came from. Pluggable by
+/// design — the only LIVE source today is `pasted_text`
+/// (src/app/api/intake). The others are reserved so future source adapters
+/// (WhatsApp, email, calendar, uploads, voice) don't require a schema
+/// migration, only a new enum value + adapter.
+enum ResponsibilitySourceType {
+  pasted_text
+  manual_entry
+  email
+  whatsapp
+  document_upload
+  calendar_event
+  voice
+}
+
+model Responsibility {
+  id          String   @id @default(cuid())
+  householdId String
+  title       String
+  /// Plain-language summary — mirrors IntakeResult.summary when created from
+  /// an intake extraction (see src/lib/business/responsibility.ts).
+  description String?
+  category    ResponsibilityCategory @default(other)
+  domain      ResponsibilityDomain   @default(other)
+
+  ownerId String?
+  owner   HouseholdMember? @relation("ResponsibilityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  providerId String?
+  provider   Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  stage    ResponsibilityStage @default(received)
+  /// 1 (low) – 3 (high). Kept as a small bounded int rather than an enum so
+  /// the at-risk scorer can do simple arithmetic; the UI maps it to labels.
+  priority Int                 @default(2)
+
+  /// --- Waiting: a CONDITION, not a stage (north-star correction) ---
+  /// All three are set/cleared together, atomically, only by the
+  /// deterministic transition logic in
+  /// src/lib/business/responsibility.ts — never touched by unrelated field
+  /// edits, so `waitingSince` reliably answers "since when" rather than
+  /// drifting on every incidental update the way `updatedAt` would.
+  /// `waitingSince` non-null IS the waiting condition; there is no separate
+  /// boolean to fall out of sync with it.
+  waitingFor   String?
+  waitingSince DateTime?
+  followUpAt   DateTime?
+
+  /// Free-text next action, always singular per the north star ("always one
+  /// concrete move"). Mirrors IntakeResult.nextStep.
+  nextStep String?
+
+  /// When the responsibility next matters. Nullable — not every
+  /// responsibility (e.g. "waiting on a callback") has a hard deadline yet.
+  dueAt       DateTime?
+  completedAt DateTime?
+
+  /// Outcome captured optionally at/after completion, to support future
+  /// structured memory ("how much did we pay?"). Never required, never
+  /// inferred — set only when a human enters it.
+  amount Decimal? @db.Decimal(10, 2)
+
+  sourceType      ResponsibilitySourceType @default(manual_entry)
+  /// Opaque reference to the originating record (e.g. an intake submission
+  /// id) — never the raw source content itself; keeps this table small and
+  /// avoids duplicating whatever future source-adapter tables store.
+  sourceReference String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  household  Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  /// Supports the idempotent demo seed's upsert-by-title (src/lib/seed.ts).
+  /// Real, non-seeded responsibilities may share a title across a household
+  /// (e.g. two "Electricity bill" entries in different months) — the seed
+  /// works around this by giving each demo row a distinct, dated title.
+  @@unique([householdId, title])
+  @@index([householdId, stage])
+  @@index([householdId, dueAt])
+  @@index([householdId, waitingSince])
+  @@map("responsibilities")
+}
+
+/// Lightweight, append-only timeline entry — the seed of "household memory."
+/// Deliberately NOT an event-sourcing system — just a flat log a UI can
+/// render in order.
+enum ActivityEventType {
+  received
+  understood
+  assigned
+  stage_changed
+  owner_changed
+  waiting_started
+  waiting_ended
+  note
+  completed
+}
+
+model Activity {
+  id              String            @id @default(cuid())
+  householdId     String
+  responsibilityId String?
+  eventType       ActivityEventType
+  description     String
+  createdAt       DateTime          @default(now())
+
+  household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  responsibility Responsibility? @relation(fields: [responsibilityId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, createdAt])
+  @@index([responsibilityId])
+  @@map("activities")
+}
