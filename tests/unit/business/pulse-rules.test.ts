@@ -1,6 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { buildHighlights, computeCounts, type PulseRow } from '@/lib/business/pulse-rules';
+import {
+  buildDailyBriefing,
+  buildHighlights,
+  computeCounts,
+  type PulseCounts,
+  type PulseRow,
+} from '@/lib/business/pulse-rules';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
@@ -108,5 +114,60 @@ describe('buildHighlights', () => {
       row({ title: `Item ${i}`, ownerId: null, stage: 'active' }),
     );
     expect(buildHighlights(rows, NOW)).toHaveLength(5);
+  });
+});
+
+describe('buildDailyBriefing', () => {
+  const counts = (overrides: Partial<PulseCounts>): PulseCounts => ({
+    attentionCount: 0,
+    waitingCount: 0,
+    upcomingCount: 0,
+    atRiskCount: 0,
+    completedCount: 0,
+    ...overrides,
+  });
+
+  it('greets by time of day', () => {
+    // Constructed from local components (not a 'Z' ISO string) so
+    // getHours() reads back exactly 8/14/20 regardless of the test
+    // runner's timezone.
+    expect(buildDailyBriefing(counts({}), new Date(2026, 7, 28, 8)).greeting).toBe('Good morning.');
+    expect(buildDailyBriefing(counts({}), new Date(2026, 7, 28, 14)).greeting).toBe(
+      'Good afternoon.',
+    );
+    expect(buildDailyBriefing(counts({}), new Date(2026, 7, 28, 20)).greeting).toBe(
+      'Good evening.',
+    );
+  });
+
+  it('produces no lines when every count is zero', () => {
+    expect(buildDailyBriefing(counts({})).lines).toEqual([]);
+  });
+
+  it('produces one line per non-zero count, in attention -> waiting -> upcoming order', () => {
+    const briefing = buildDailyBriefing(
+      counts({ attentionCount: 3, waitingCount: 1, upcomingCount: 2 }),
+    );
+    expect(briefing.lines).toEqual([
+      '3 things need attention.',
+      '1 thing is waiting.',
+      '2 things are coming up.',
+    ]);
+  });
+
+  it('uses singular wording for a count of exactly one', () => {
+    const briefing = buildDailyBriefing(
+      counts({ attentionCount: 1, waitingCount: 1, upcomingCount: 1 }),
+    );
+    expect(briefing.lines).toEqual([
+      '1 thing needs attention.',
+      '1 thing is waiting.',
+      '1 thing is coming up.',
+    ]);
+  });
+
+  it('skips a line entirely for a zero count rather than saying "0"', () => {
+    const briefing = buildDailyBriefing(counts({ attentionCount: 2 }));
+    expect(briefing.lines).toEqual(['2 things need attention.']);
   });
 });

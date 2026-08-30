@@ -61,6 +61,52 @@ export function computeCounts(rows: PulseRow[], now: Date = new Date()): PulseCo
   return { attentionCount, waitingCount, upcomingCount, atRiskCount, completedCount };
 }
 
+export interface DailyBriefing {
+  greeting: string;
+  /** Zero to three short lines, e.g. "3 things need attention.", ordered
+   * attention -> waiting -> upcoming. Empty only alongside a "you're
+   * caught up" style greeting handled by the caller — this function never
+   * fabricates a line for a zero count. */
+  lines: string[];
+}
+
+/** Time-of-day greeting — pure function of the clock, not a stored
+ * preference; kept separate from the count logic below so it's trivially
+ * testable at fixed hours. */
+function greetingForHour(hour: number): string {
+  if (hour < 12) return 'Good morning.';
+  if (hour < 18) return 'Good afternoon.';
+  return 'Good evening.';
+}
+
+/** Deterministic daily-briefing sentence, built from the same counts
+ * {@link computeCounts} already produces — no separate calculation, no LLM.
+ * Matches the product brief's "Good morning. 3 things need attention. 1
+ * thing is waiting. 2 things are coming up." shape, but only speaks about
+ * conditions that are actually true (a zero count produces no line). */
+export function buildDailyBriefing(counts: PulseCounts, now: Date = new Date()): DailyBriefing {
+  const greeting = greetingForHour(now.getHours());
+  const lines: string[] = [];
+
+  if (counts.attentionCount > 0) {
+    lines.push(
+      `${counts.attentionCount} ${counts.attentionCount === 1 ? 'thing needs' : 'things need'} attention.`,
+    );
+  }
+  if (counts.waitingCount > 0) {
+    lines.push(
+      `${counts.waitingCount} ${counts.waitingCount === 1 ? 'thing is' : 'things are'} waiting.`,
+    );
+  }
+  if (counts.upcomingCount > 0) {
+    lines.push(
+      `${counts.upcomingCount} ${counts.upcomingCount === 1 ? 'thing is' : 'things are'} coming up.`,
+    );
+  }
+
+  return { greeting, lines };
+}
+
 /** Deterministic, specific highlight sentences — one per real condition
  * found, capped so the UI never gets flooded. Every sentence names the
  * actual responsibility title; nothing here is templated marketing copy. */

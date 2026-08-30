@@ -151,7 +151,7 @@ export function IntakeWorkspace() {
     setSourceError(null);
     setIsSubmitting(true);
     try {
-      const result = await apiFetch('/api/intake', {
+      const result = await apiFetch<IntakeResultType>('/api/intake', {
         method: 'POST',
         body: JSON.stringify(parsed.data),
         schema: IntakeResult,
